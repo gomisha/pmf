@@ -2,3 +2,4 @@ data/
 data-test/
 .idea/
 matches*.txt
+.DS_Store

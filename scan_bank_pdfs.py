@@ -1,3 +1,5 @@
+import re
+
 import fitz  # PyMuPDF
 import pymupdf
 import os
@@ -5,13 +7,33 @@ import os
 # configuration
 ROOT_DIR = "data-test"
 KEYWORDS = ["BCBS", "Blue Cross", "Blue Shield", "Availity", "Change Healthcare", "EFT/ACH Payment from", "Insurance Reimbursement"]
+FORBIDDEN_KEYWORDS = ["debit", "premium"]
+
+
+def is_not_near_forbidden_keywords(text, keyword, forbidden_words, window_size=4):
+    words = re.findall(r"\w+", text.lower()) # extract only numbers, letters, strip out punctuation, line breaks
+
+    matches = [i for i, word in enumerate(words) if keyword.lower() in word]
+
+    for index in matches:
+        # Create a window of words around the match
+        start = max(0, index - window_size)
+        end = min(len(words), index + window_size + 1)
+        context = words[start:end]
+
+        # Check for forbidden words in context
+        if any(fw in context for fw in forbidden_words):
+            return False  # found forbidden context
+    return True  # passed all checks
 
 
 def contains_keyword(tull_text):
     text_lower = tull_text.lower()
     for keyword in KEYWORDS:
         if keyword.lower() in text_lower:
-            return True # found the keyword
+            print(f"keyword {keyword} found in full text: {tull_text}")
+            if is_not_near_forbidden_keywords(text_lower, keyword, FORBIDDEN_KEYWORDS):
+                return True  # found the keyword
     return False
 
 
