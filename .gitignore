@@ -1,5 +1,6 @@
 data/
 data-test/
+data-temp/
 .idea/
 matches*.txt
 .DS_Store

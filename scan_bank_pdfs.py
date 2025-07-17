@@ -6,9 +6,8 @@ import os
 
 # configuration
 ROOT_DIR = "data-test"
-KEYWORDS = ["BCBS", "Blue Cross", "Blue Shield", "Availity", "Change Healthcare", "EFT/ACH Payment from", "Insurance Reimbursement"]
+KEYWORDS = ["BCBS", "Blue Cross", "BlueCross" "Blue Shield", "BlueShld", "Availity", "Change Healthcare", "EFT/ACH Payment from", "Insurance Reimbursement"]
 FORBIDDEN_KEYWORDS = ["debit", "premium"]
-
 
 def is_not_near_forbidden_keywords(text, keyword, forbidden_words, window_size=4):
     words = re.findall(r"\w+", text.lower()) # extract only numbers, letters, strip out punctuation, line breaks
@@ -40,11 +39,11 @@ def contains_keyword(tull_text):
 def scan_pdf(file_path):
     try:
         doc = pymupdf.open(file_path)
-        # print(f"file: {file_path}")
+        print(f"file: {file_path}")
         full_text = ""
         for page in doc:
             text = page.get_text()
-            # print(text)
+            print(f"text: {text}")
             if contains_keyword(text):
                 return True # return as soon as there's a match - no need to keep scanning more pages
     except Exception as e:
