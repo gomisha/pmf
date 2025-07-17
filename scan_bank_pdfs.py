@@ -1,77 +1,101 @@
 import re
 
-import fitz  # PyMuPDF
 import pymupdf
 import os
+import csv
+import sys
 
 # configuration
-ROOT_DIR = "data-test"
 KEYWORDS = ["BCBS", "Blue Cross", "BlueCross" "Blue Shield", "BlueShld", "Availity", "Change Healthcare", "EFT/ACH Payment from", "Insurance Reimbursement"]
-FORBIDDEN_KEYWORDS = ["debit", "premium"]
-
-def is_not_near_forbidden_keywords(text, keyword, forbidden_words, window_size=4):
-    words = re.findall(r"\w+", text.lower()) # extract only numbers, letters, strip out punctuation, line breaks
-
-    matches = [i for i, word in enumerate(words) if keyword.lower() in word]
-
-    for index in matches:
-        # Create a window of words around the match
-        start = max(0, index - window_size)
-        end = min(len(words), index + window_size + 1)
-        context = words[start:end]
-
-        # Check for forbidden words in context
-        if any(fw in context for fw in forbidden_words):
-            return False  # found forbidden context
-    return True  # passed all checks
+NEGATIVE_KEYWORDS = ["debit", "premium"]
+WINDOW_SIZE = 4  # number of words to look around the keyword for a negative keyword
+OUTPUT_FILE = "scan.csv"
 
 
-def contains_keyword(tull_text):
-    text_lower = tull_text.lower()
-    for keyword in KEYWORDS:
-        if keyword.lower() in text_lower:
-            print(f"keyword {keyword} found in full text: {tull_text}")
-            if is_not_near_forbidden_keywords(text_lower, keyword, FORBIDDEN_KEYWORDS):
-                return True  # found the keyword
-    return False
+def extract_text_from_pdf(file_path):
+    try:
+        doc = pymupdf.open(file_path)
+        # reader = PdfReader(file_path)
+        text = ""
+        for page in doc:
+            text += page.get_text() or ""
+        return text, None
+    except Exception as e:
+        return "", str(e)
+
+
+def count_nearby_negative_keywords(text, keyword, index, radius=50):
+    lower_text = text.lower()
+    start = max(0, index - radius)
+    end = min(len(lower_text), index + radius)
+    context = lower_text[start:end]
+    count = sum(1 for neg in NEGATIVE_KEYWORDS if neg.lower() in context)
+    found_keywords = [neg for neg in NEGATIVE_KEYWORDS if neg.lower() in context]
+    return count, found_keywords
 
 
 def scan_pdf(file_path):
-    try:
-        doc = pymupdf.open(file_path)
-        print(f"file: {file_path}")
-        full_text = ""
-        for page in doc:
-            text = page.get_text()
-            print(f"text: {text}")
-            if contains_keyword(text):
-                return True # return as soon as there's a match - no need to keep scanning more pages
-    except Exception as e:
-        print(f"error reading {file_path}: {e}")
-        return False
+    text, error = extract_text_from_pdf(file_path)
+    lower_text = text.lower()
+    word_count = len(text.split())
 
-def main():
-    # print("Hello World")
-    matches = []
-    counter = 0
-    for dir_path, _, file_names in os.walk(ROOT_DIR):
-        for file_name in file_names:
-            # print(f"scanning {file_name}")
-            if file_name.lower().endswith(".pdf"):
-                full_path = os.path.join(dir_path, file_name)
-                # print(full_path)
-                if scan_pdf(full_path):
-                    matches.append(full_path)
-                    print(f"[MATCH] {full_path}")
-                counter += 1
-    print("counter:", counter)
+    matched_keywords = []
+    matched_negative_keywords = []
+    positive_keyword_count = 0
+    nearby_negative_keyword_count = 0
 
-    with open("matches.txt", "w") as matches_file:
-        for path in matches:
-            matches_file.write(path + "\n")
+    if not error:
+        for keyword in KEYWORDS:
+            for match in re.finditer(re.escape(keyword.lower()), lower_text):
+                positive_keyword_count += 1
+                matched_keywords.append(keyword)
+                neg_count, neg_matches = count_nearby_negative_keywords(lower_text, keyword, match.start())
+                nearby_negative_keyword_count += neg_count
+                matched_negative_keywords.extend(neg_matches)
 
-    print(f"Done. {len(matches)} matches")
+    # Append results to CSV
+    with open(OUTPUT_FILE, mode="a", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow([
+            file_path,
+            positive_keyword_count,
+            "|".join(matched_keywords),
+            nearby_negative_keyword_count,
+            "|".join(matched_negative_keywords),
+            error or "",
+            word_count
+        ])
+
+
+def initialize_csv():
+    # if not os.path.exists(OUTPUT_FILE):
+    with open(OUTPUT_FILE, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow([
+            "file_path",
+            "positive_keyword_count",
+            "matched_keywords",
+            "nearby_negative_keyword_count",
+            "matched_negative_keywords",
+            "error",
+            "word_count"
+        ])
+
+
+def main(folder_path):
+    initialize_csv()
+
+    for root, _, files in os.walk(folder_path):
+        for name in files:
+            if name.lower().endswith(".pdf"):
+                file_path = os.path.join(root, name)
+                print(f"Scanning: {file_path}")
+                scan_pdf(file_path)
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 2:
+        print("Usage: python scan.py /path/to/folder")
+        sys.exit(1)
+    folder_to_scan = sys.argv[1]
+    main(folder_to_scan)
